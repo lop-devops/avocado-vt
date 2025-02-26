@@ -4912,7 +4912,7 @@ def obtain_guest_ip_from_dhcp_leases(mac):
              virsh-net-dhcp-leases default table, else return None
     """
     output = virsh.net_dhcp_leases("default")
-        lines = output.stdout.splitlines()
+    lines = output.stdout.splitlines()
     for line in lines:
         if mac in line:
             parts = line.split()
