@@ -386,7 +386,7 @@ class VM(virt_vm.BaseVM):
         except virt_vm.VMIPAddressMissingError:
             mac = self.get_mac_address(index).lower()
             ipaddr = utils_net.obtain_guest_ip_from_dhcp_leases(mac)
-                        self.address_cache[mac] = ipaddr
+            self.address_cache[mac] = ipaddr
             return ipaddr
 
     def clone(
