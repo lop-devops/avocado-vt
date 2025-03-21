@@ -2360,8 +2360,8 @@ class Stress(object):
             "%s_downloaded_file_path" % self.stress_type, downloaded_file_path
         )
         check_cmd = self.stress_cmds.split(" ")[0]
-        self.check_cmd = "pidof -s %s" % check_cmd
-        self.stop_cmd = "pkill -9 %s" % check_cmd
+        self.check_cmd = self.params.get("check_cmds_%s" % stress_type, "pidof -s %s" % check_cmd)
+        self.stop_cmd = self.params.get("stop_cmds_%s" % stress_type, "pkill -9 %s" % check_cmd)
         self.dst_path = self.params.get("stress_dst_path", "/home")
         self.cmd_status_output = process.getstatusoutput
         self.cmd_output_safe = process.getoutput
@@ -2394,7 +2394,7 @@ class Stress(object):
             text="wait for stress app to start",
             step=1.0,
         ):
-            raise exceptions.TestError("Stress app does not " "running as expected")
+            raise exceptions.TestError("Stress app is not running as expected")
 
     @session_handler
     def load_htxstress_tool(self):
@@ -2433,7 +2433,52 @@ class Stress(object):
             text="wait for stress app to start",
             step=1.0,
         ):
-            raise exceptions.TestError("Stress app does not " "running as expected")
+            raise exceptions.TestError("Stress app is not running as expected")
+
+    @session_handler
+    def load_sls_tool(self):
+        """
+        load stress tool in guest
+        Currently, this function supports tar method of installation 
+        """
+        # install sls stress tool
+        sls_path = os.path.join(self.dst_path, self.base_name.split('.')[-2])
+        remove_old_tar = "cd " + self.dst_path + " && rm -rf " + self.base_name
+        remove_old_folder = "cd " + self.dst_path + " && rm -rf " + sls_path
+        get_stress = "cd " + self.dst_path + " && wget " + self.download_url
+        unarchive_stress = "cd " + self.dst_path + " && tar -xvf " + self.base_name
+        install_stress = "cd " + sls_path + " && " + self.make_cmds
+        set_log_level = "dmesg -n 3"
+        try:
+            LOG.info("Unarchive tar and install sls stress file")
+            self.cmd(remove_old_tar)
+            self.cmd(remove_old_folder)
+            self.cmd(get_stress, timeout=180)
+            self.cmd(unarchive_stress)
+            self.cmd(install_stress, timeout=900)
+            self.cmd(set_log_level)
+        except Exception as err:
+            raise exceptions.TestError("Could not install sls stress tool:", str(err))
+
+        # start sls stress
+        launch_cmds = "cd " + sls_path + " && nohup %s %s > /dev/null &" % (self.stress_cmds, self.stress_args)
+        LOG.info("Launch stress with command: %s", launch_cmds)
+        try:
+            self.cmd_launch(launch_cmds)
+            # The background process sometimes does not return to
+            # terminate, if timeout, send a blank line afterward
+        except aexpect.ShellTimeoutError:
+            self.cmd_launch("")
+
+        # wait for stress to start and then check, if not raise TestError
+        if not utils_misc.wait_for(
+            self.app_running,
+            self.stress_wait_for_timeout,
+            first=2.0,
+            text="wait for stress app to start",
+            step=1.0,
+        ):
+            raise exceptions.TestError("Stress app is not running as expected")
 
     @session_handler
     def unload_stress(self):
@@ -2826,7 +2871,7 @@ def load_stress(
     """
     fail_info = []
     default_stress_type = stress_type
-    if stress_type in ["stress_in_vms", "iozone_in_vms", "htxcmdline_in_vms"]:
+    if stress_type in ["stress_in_vms", "iozone_in_vms", "htxcmdline_in_vms", "sls_in_vms"]:
         for vm in vms:
             stress_type = params.get("stress_type_%s" % vm.name, default_stress_type)
             if stress_type == "htxcmdline_in_vms":
@@ -2848,6 +2893,26 @@ def load_stress(
                 except StressError as detail:
                     fail_info.append(
                         "Launch htxstress in %s failed: %s" % (vm.name, detail)
+                    )
+            elif stress_type == "sls_in_vms":
+                # Add sls stress tool in vms
+                try:
+                    vstress = VMStress(
+                        vm,
+                        stress_type.split("_")[0],
+                        params,
+                        download_url,
+                        make_cmds,
+                        stress_cmds,
+                        stress_args,
+                        work_path,
+                        uninstall_cmds,
+                        download_type=download_type,
+                    )
+                    vstress.load_sls_tool()
+                except StressError as detail:
+                    fail_info.append(
+                        "Launch sls-stress in %s failed: %s" % (vm.name, detail)
                     )
             else:
                 # Add stress/iozone tool in vms
