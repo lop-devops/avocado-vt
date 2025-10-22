@@ -880,6 +880,8 @@ def mkfs(partition, fs_type, options="", session=None):
     """
     Force to make a file system on the partition
     """
+    # Add sleep to avoid "Device or resource busy" error
+    time.sleep(10)
     force_option = ""
     if fs_type in ["ext2", "ext3", "ext4", "ntfs"]:
         force_option = "-F"
