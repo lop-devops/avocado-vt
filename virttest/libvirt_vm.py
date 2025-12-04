@@ -383,12 +383,20 @@ class VM(virt_vm.BaseVM):
         try:
             return super()._get_address(index, ip_version, session, timeout)
         except virt_vm.VMIPAddressMissingError:
+            mac = self.get_mac_address(index).lower()
             if ip_version == "ipv4":
-                mac = self.get_mac_address(index).lower()
                 ipaddr = utils_net.obtain_guest_ip_from_domifaddr(self.name, mac)
-                self.address_cache[mac] = ipaddr
-                return ipaddr
-            return None
+                if ipaddr:
+                    self.address_cache[mac] = ipaddr
+                    return ipaddr
+                else:
+                    raise virt_vm.VMIPAddressMissingError(
+                        "IP address not found for MAC: %s", mac
+                    )
+            else:
+                raise virt_vm.VMIPAddressMissingError(
+                    "No IP address found for IP version: %s", ip_version
+                )
 
     def clone(
         self,
