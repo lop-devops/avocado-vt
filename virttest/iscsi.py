@@ -726,6 +726,12 @@ class IscsiLIO(_IscsiComm):
 
             check_portal = "targetcli /iscsi/%s/tpg1/portals ls" % self.target
             portal_info = process.run(check_portal).stdout_text
+            if "[::0]:3260" in portal_info:
+                # Remove the IPv6 portal
+                remove_portal_cmd = "targetcli /iscsi/%s/tpg1/portals/ delete ::0 ip_port=3260" % (self.target)
+                output = process.run(remove_portal_cmd).stdout_text
+                if "Deleted network portal" not in output:
+                    raise exceptions.TestFail("Failed to delete portal. (%s)" % output)
             if "0.0.0.0:3260" not in portal_info:
                 # Create portal
                 # 0.0.0.0 means binding to INADDR_ANY
